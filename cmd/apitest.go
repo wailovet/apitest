@@ -169,8 +169,10 @@ function GetAllTest(){
 func main() {
 	var yapi string
 	var js string
+	var web string
 	flag.StringVar(&yapi, "yapi", "", "yapi配置文件")
 	flag.StringVar(&js, "js", "apitest.js", "输出文件")
+	flag.StringVar(&web, "web", "", "网络文件")
 	flag.Parse()
 
 	if yapi != "" {
@@ -181,7 +183,12 @@ func main() {
 	getOttoInstance().Set("Ajax", Ajax)
 	getOttoInstance().Set("AssetError", AssetError)
 
-	jss, _ := ioutil.ReadFile(js)
+	jss := []byte("")
+	if web != ""{
+		jss = []byte(HttpGet(web, ""))
+	}else {
+		jss, _ = ioutil.ReadFile(js)
+	}
 
 	getOttoInstance().Run(fmt.Sprintf("%s\n%s", jss, `
 		var _fnjkadhaskjdkas = GetAllTest();

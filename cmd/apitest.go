@@ -5,10 +5,15 @@ import (
 	"flag"
 	"fmt"
 	"github.com/robertkrimen/otto"
+	"github.com/wailovet/osmanthuswine"
+	"github.com/wailovet/osmanthuswine/src/core"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
 )
 
 func HttpGet(getUrl string, p string) string {
@@ -22,12 +27,14 @@ func HttpGet(getUrl string, p string) string {
 	//log.Println(allUrl)
 	resp, err := http.Get(allUrl)
 	if err != nil {
+		GoAssetError("http err", "[", allUrl, "]", err.Error())
 		// handle error
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		GoAssetError("http err", "[", allUrl, "]", err.Error())
 		// handle error
 	}
 
@@ -42,13 +49,14 @@ func HttpPostForm(postUrl string, p string) string {
 	resp, err := http.Post(postUrl, "application/x-www-form-urlencoded", strings.NewReader(p))
 
 	if err != nil {
+		GoAssetError("http err", "[", postUrl, "]", err.Error())
 		// handle error
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		// handle error
+		GoAssetError("http err", "[", postUrl, "]", err.Error())
 	}
 
 	return string(body)
@@ -58,8 +66,7 @@ func HttpPostForm(postUrl string, p string) string {
 func GoAssetError(a ...interface{}) {
 	result := []interface{}{"[fail]"}
 	result = append(result, a...)
-	fmt.Println(result...)
-	os.Exit(0)
+	panic(result)
 }
 
 func AssetError(call otto.FunctionCall) otto.Value {
@@ -166,27 +173,15 @@ function GetAllTest(){
 
 }
 
-func main() {
-	var yapi string
-	var js string
-	var web string
-	flag.StringVar(&yapi, "yapi", "", "yapi配置文件")
-	flag.StringVar(&js, "js", "apitest.js", "输出文件")
-	flag.StringVar(&web, "web", "", "网络文件")
-	flag.Parse()
+const PASS = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="98" height="20"><linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><clipPath id="a"><rect width="98" height="20" rx="3" fill="#fff"/></clipPath><g clip-path="url(#a)"><path fill="#555" d="M0 0h47v20H0z"/><path fill="#4c1" d="M47 0h51v20H47z"/><path fill="url(#b)" d="M0 0h98v20H0z"/></g><g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="110"> <text x="245" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="370">apitest</text><text x="245" y="140" transform="scale(.1)" textLength="370">apitest</text><text x="715" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="410">passing</text><text x="715" y="140" transform="scale(.1)" textLength="410">passing</text></g> </svg>`
+const FAIL = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="86" height="20"><linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><clipPath id="a"><rect width="86" height="20" rx="3" fill="#fff"/></clipPath><g clip-path="url(#a)"><path fill="#555" d="M0 0h47v20H0z"/><path fill="#e05d44" d="M47 0h39v20H47z"/><path fill="url(#b)" d="M0 0h86v20H0z"/></g><g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="110"> <text x="245" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="370">apitest</text><text x="245" y="140" transform="scale(.1)" textLength="370">apitest</text><text x="655" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="290">failed</text><text x="655" y="140" transform="scale(.1)" textLength="290">failed</text></g> </svg>`
+const PENDING = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="102" height="20"><linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><clipPath id="a"><rect width="102" height="20" rx="3" fill="#fff"/></clipPath><g clip-path="url(#a)"><path fill="#555" d="M0 0h47v20H0z"/><path fill="#dbab09" d="M47 0h55v20H47z"/><path fill="url(#b)" d="M0 0h102v20H0z"/></g><g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="110"> <text x="245" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="370">apitest</text><text x="245" y="140" transform="scale(.1)" textLength="370">apitest</text><text x="735" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="450">pending</text><text x="735" y="140" transform="scale(.1)" textLength="450">pending</text></g> </svg>`
 
-	if yapi != "" {
-		generateYapiTest(yapi, js)
-		return
-	}
-
-	getOttoInstance().Set("Ajax", Ajax)
-	getOttoInstance().Set("AssetError", AssetError)
-
+func start(web string, js string) {
 	jss := []byte("")
-	if web != ""{
+	if web != "" {
 		jss = []byte(HttpGet(web, ""))
-	}else {
+	} else {
 		jss, _ = ioutil.ReadFile(js)
 	}
 
@@ -198,5 +193,100 @@ func main() {
 `))
 
 	fmt.Println("[pass]")
-	os.Exit(0)
+}
+
+var webMap = new(sync.Map)
+
+type testResult struct {
+	Result     string `json:"result"`
+	UpdateTime int64  `json:"update_time"`
+}
+
+func badgeWeb() {
+
+	osmanthuswine.HandleFunc("/badge.svg", func(request core.Request, response core.Response) {
+
+		if request.REQUEST["url"] == "" {
+			response.DisplayByError("请传入url参数", 500)
+		}
+		response.OriginResponseWriter.Header().Set("content-type", "image/svg+xml;charset=utf-8")
+
+		tmp, ok := webMap.Load(request.REQUEST["url"])
+		if ok {
+			cache := tmp.(testResult)
+			if cache.UpdateTime+60 > time.Now().Unix() {
+				response.OriginResponseWriter.Write([]byte(cache.Result))
+				return
+			}
+		}
+
+		(func() {
+			defer func() {
+				a := recover()
+				if a != nil {
+					response.OriginResponseWriter.Write([]byte(FAIL))
+					webMap.Store(request.REQUEST["url"], testResult{
+						Result:     FAIL,
+						UpdateTime: time.Now().Unix(),
+					})
+					log.Println(a.([]interface{})...)
+				}
+			}()
+
+			webMap.Store(request.REQUEST["url"], testResult{
+				Result:     PENDING,
+				UpdateTime: time.Now().Unix(),
+			})
+			start(request.REQUEST["url"], "")
+			webMap.Store(request.REQUEST["url"], testResult{
+				Result:     PASS,
+				UpdateTime: time.Now().Unix(),
+			})
+			response.OriginResponseWriter.Write([]byte(PASS))
+		})()
+
+	})
+
+	osmanthuswine.Run()
+}
+
+func main() {
+	var yapi string
+	var js string
+	var web string
+	var badge bool
+	var port string
+	flag.StringVar(&yapi, "yapi", "", "yapi配置文件")
+	flag.StringVar(&js, "js", "apitest.js", "输出文件")
+	flag.StringVar(&web, "web", "", "网络文件")
+	flag.StringVar(&port, "p", "80", "徽章模式端口")
+	flag.BoolVar(&badge, "badge", false, "徽章模式")
+	flag.Parse()
+
+
+	if yapi != "" {
+		generateYapiTest(yapi, js)
+		return
+	}
+
+	getOttoInstance().Set("Ajax", Ajax)
+	getOttoInstance().Set("AssetError", AssetError)
+
+	if badge {
+		core.GetInstanceConfig().Port = port
+		badgeWeb()
+	} else {
+
+		(func() {
+			defer func() {
+				a := recover()
+				if a != nil {
+
+					fmt.Println(a.([]interface{})...)
+				}
+			}()
+			start(web, js)
+		})()
+		os.Exit(0)
+	}
 }
